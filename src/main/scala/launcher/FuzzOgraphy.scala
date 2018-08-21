@@ -37,42 +37,76 @@ class FuzzOgraphy(settingsPath: String)(implicit val spark: SparkSession) extend
     val inputCitiesDF = InputReader.readCities(
       configuration.inputFiles.basePath + configuration.inputFiles.inputCities
     ).transform(InputReader.cleanCities)
-    traceDf("inputCitiesDF", inputCitiesDF, printSample)
+    //traceDf("inputCitiesDF", inputCitiesDF, printSample)
 
     val geoCitiesDF = GeoReader.readGeoCities(
       configuration.geoData.basePath + configuration.geoData.geoCities
     ).transform(GeoReader.cleanGeoCities)
-    traceDf("geoCitiesDF", geoCitiesDF, printSample)
+    //traceDf("geoCitiesDF", geoCitiesDF, printSample)
 
-    var outputDf = inputCitiesDF
-      .transform(Matcher.perfectMatch(geoCitiesDF)).persist()
+    val leftDf = inputCitiesDF.select("Input_CountryCode", "normalized_city").distinct()
+    printDf("leftDf at begin", leftDf)
+
+    val rightDf = geoCitiesDF.select("Output_CountryCode", "normalized_geo_city").distinct()
+    printDf("rightDf at begin", rightDf)
+
+
+    var outputDf = leftDf
+      .transform(Matcher.perfectMatch(rightDf)).persist()
       .transform(Matcher.getMatched)
       .transform(Matcher.checkDuplicates)
     printDf("outputDf containing perfect Matches", outputDf)
 
-    var missingDf = inputCitiesDF
-      .transform(Matcher.perfectMatch(geoCitiesDF)).persist()
-      .transform(Matcher.getMissingInputCities)
+    var missingDf = leftDf
+      .transform(Matcher.getMissingInputCities(outputDf)).persist()
     printDf("missingDf after perfect Matches", missingDf)
 
-    var outputDfDist = missingDf
-      .transform(Matcher.distanceMatch(geoCitiesDF, 20)).persist()
-      .transform(Matcher.getMatched)
-      .transform(Matcher.checkDuplicates)
-    printDf("outputDfDist containing 20% distance matches", missingDf)
+    val distances = List(10,15,20,25,30,35,40,45)
 
-    missingDf = missingDf
-      .transform(Matcher.distanceMatch(geoCitiesDF, 20)).persist()
-      .transform(Matcher.getMissingInputCities)
-    printDf("missingDf after 20% distance matches", missingDf)
+    for (distance <- distances) {
+      logger.info(s"matching on a distance of:${distance}")
 
+      val outputDfTmp = missingDf
+        .transform(Matcher.distanceMatch(rightDf, distance)).persist()
+        .transform(Matcher.getMatched)
+        .transform(Matcher.checkDuplicates)
+      printDf(s"outputDfTmp containing ${distance}% distance matches", outputDfTmp)
+
+      missingDf = missingDf
+        .transform(Matcher.getMissingInputCities(outputDfTmp)).persist()
+      printDf(s"missingDfTmp after ${distance}% distance matches", missingDf)
+
+      outputDf = outputDf.union(outputDfTmp)
+
+      outputDf
+        .repartition(1)
+        .sort()
+        .write
+        .format("csv")
+        .option("header", "true")
+        .option("delimiter", "|")
+        .save(s"/home/npodevkit/zeppelin_0.7.3/share/FUZZ-OGRAPHY/20180822/${distance}_output.csv")
+
+      missingDf
+        .repartition(1)
+        .sort()
+        .write
+        .format("csv")
+        .option("header", "true")
+        .option("delimiter", "|")
+        .save(s"/home/npodevkit/zeppelin_0.7.3/share/FUZZ-OGRAPHY/20180822/${distance}_missing.csv")
+
+    }
   }
 
   def traceDf(dataFrameName: String, dataframe: DataFrame, showDataframeContent: Boolean): Unit = {
     if (showDataframeContent) {
       //this is really costly and should be used only in debugging phase
+      dataframe.persist()
+      val lines : Int = dataframe.count().toInt;
       dataframe.show(10, false)
       println(s"dataFrame:$dataFrameName")
+      println(s"lines:$lines")
       println("=======================================")
     }
   }
@@ -81,7 +115,7 @@ class FuzzOgraphy(settingsPath: String)(implicit val spark: SparkSession) extend
     //TODO:Remove
     dataframe.persist()
     val lines : Int = dataframe.count().toInt;
-    dataframe.show(lines, false)
+    dataframe.show(10, false)
     println(s"dataFrame:$dataFrameName")
     println(s"lines:$lines")
     println("=======================================")

@@ -11,8 +11,8 @@ object Matcher extends Loggable {
     citiesDf
       .join(
         geoCitiesDf,
-        citiesDf("CountryCode") <=> geoCitiesDf("CC_FIPS")
-          && citiesDf("normalized_city") === geoCitiesDf("normalized_geo_city"),
+        citiesDf("Input_CountryCode") === geoCitiesDf("Output_CountryCode") &&
+        citiesDf("normalized_city") === geoCitiesDf("normalized_geo_city"),
         "left_outer"
       )
   }
@@ -21,16 +21,17 @@ object Matcher extends Loggable {
     citiesDf
       .join(
         geoCitiesDf,
-        citiesDf("CountryCode") <=> geoCitiesDf("CC_FIPS") &&
-          //1/(word_lenght/(levenshtein_distance*100))
+          citiesDf("Input_CountryCode") === geoCitiesDf("Output_CountryCode") &&
           //( levenshtein(citiesDf("normalized_city"), geoCitiesDf("normalized_geo_city")) <= 1 ),
-          ( lit(1) /
-            (length(citiesDf("normalized_city"))
-              / (levenshtein(citiesDf("normalized_city"), geoCitiesDf("normalized_geo_city")) * 100)
-              )
-            <= distancePerCent),
+
+          /*  Percentage of word distance between city and geo-city.
+              Formula:
+              1/(city_lenght/(levenshtein_distance*100))  */
+        ( lit(1)
+          / ( length(citiesDf("normalized_city"))
+            / (levenshtein(citiesDf("normalized_city"), geoCitiesDf("normalized_geo_city")) * 100) ) <= distancePerCent),
         "left_outer")
-      .dropDuplicates("CountryCode","normalized_city")
+      .dropDuplicates("normalized_city")
   }
 
   def getMatched(joinedDf: DataFrame): DataFrame = {
@@ -38,15 +39,28 @@ object Matcher extends Loggable {
   }
 
   def getMissingInputCities(foundDf: DataFrame)(sourceDf: DataFrame): DataFrame = {
-    sourceDf
-      .filter(col("normalized_geo_city").isNull)
-      .select("CountryCode", "normalized_city")
+    //left anti-join to remove already found cities
+    //foundDf.printSchema()
+    //sourceDf.printSchema()
+
+    //Look at https://issues.apache.org/jira/browse/SPARK-14948
+    val renamedDf =
+    foundDf
+      .withColumnRenamed("Input_CountryCode", "Input_CountryCode1")
+      .withColumnRenamed("normalized_city", "normalized_city1")
+
+    sourceDf.join(
+      renamedDf,
+      sourceDf("Input_CountryCode") === renamedDf("Input_CountryCode1") &&
+      sourceDf("normalized_city") === renamedDf("normalized_city1"),
+      "left_anti"
+    )
   }
 
   def checkDuplicates(joinedDf: DataFrame): DataFrame = {
     val duplicatesDf =
       joinedDf
-        .groupBy( "CountryCode","normalized_city" )
+        .groupBy( "Input_CountryCode", "normalized_city" )
         .agg(count("*").as("matching"))
         .where(col("matching") > 1)
 
@@ -55,8 +69,8 @@ object Matcher extends Loggable {
       val message = s"************************** ${duplicatesCount} Duplicates Found!"
       logger.error(message)
       duplicatesDf
-        .sort(col("CountryCode"), col("normalized_city"))
-        .show(duplicatesCount.toInt)
+        .sort( "Input_CountryCode", "normalized_city")
+        .show(duplicatesCount.toInt, false)
       throw new RuntimeException(message)
     }
     joinedDf

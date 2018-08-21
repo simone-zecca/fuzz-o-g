@@ -20,8 +20,9 @@ object GeoReader extends Loggable {
 
   def cleanGeoCities(dataFrame: DataFrame): DataFrame = {
     dataFrame
-      .withColumn("normalized_geo_city", clean_city(col("FULL_NAME_ND")))
-      .drop("FULL_NAME_ND")
+      .withColumnRenamed("FULL_NAME_ND","Output_City")
+      .withColumnRenamed("CC_FIPS","Output_CountryCode")
+      .withColumn("normalized_geo_city", concat(clean_city(col("Output_City"))))
       .distinct()
   }
 

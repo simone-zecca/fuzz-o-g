@@ -35,4 +35,31 @@ class InputReaderTest extends FlatSpec with TestSparkSession with Loggable with 
 
   }
 
+  "cleanCitiesTest" should "return a dataframe with 18713 lines and 3 columns" in {
+
+    val source: String = getClass.getResource("/configuration/test-configuration.conf").toString()
+
+    val configuration = ConfigurationReader.readFromPath(source)
+
+    val inputCitiesDF: DataFrame = InputReader.readCities(
+      configuration.inputFiles.basePath + configuration.inputFiles.inputCities)
+      .transform(InputReader.cleanCities)
+
+    val count: Long = inputCitiesDF.count()
+    logger.info(s"count: ${count}")
+
+    assertResult(18713) {
+      count
+    }
+
+    val columns: Int = inputCitiesDF.schema.length
+    //inputCitiesDF.printSchema()
+    //inputCitiesDF.show(false)
+    logger.info(s"columnsCount:${columns}")
+
+    assertResult(3) {
+      columns
+    }
+
+  }
 }

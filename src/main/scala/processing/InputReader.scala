@@ -20,11 +20,10 @@ object InputReader extends Loggable {
 
   def cleanCities(dataFrame: DataFrame): DataFrame = {
     dataFrame
-      .withColumn("normalized_city", clean_city(col("city")))
-      .drop("city")
+      .withColumnRenamed("CountryCode", "Input_CountryCode")
+      .withColumnRenamed("city", "Input_City")
+      .withColumn("normalized_city", concat(clean_city(col("Input_City"))))
       .distinct()
   }
-
-
 
 }

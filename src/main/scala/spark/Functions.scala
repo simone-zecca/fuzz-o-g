@@ -40,6 +40,7 @@ object Functions {
       .chain(translate(_, "?", " "))
       .chain(translate(_, "/", " "))
 
+
       .chain(regexp_replace(_, "avenue", " "))
 
       .chain(regexp_replace(_, "\\s+", " "))    //spaces compression

@@ -5,7 +5,7 @@ import java.time.Instant
 import configuration.{Configuration, ConfigurationReader}
 import logging.{Loggable, LoggerLoader}
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import processing.{GeoReader, InputReader, Matcher}
+import processing.{GeoReader, InputReader, Matcher, OutputWriter}
 
 object FuzzOgraphy {
   def apply(settingsPath: String)(implicit spark: SparkSession): FuzzOgraphy = {
@@ -29,7 +29,7 @@ class FuzzOgraphy(settingsPath: String)(implicit val spark: SparkSession) extend
     loggerOutputPath = logFile
   )
 
-  val printSample: Boolean = configuration.processing.showDataframeSample;
+  val printSample: Boolean = configuration.processing.showDataframeSample
 
   def run(): Unit = {
     logger.info("process Started")
@@ -47,7 +47,9 @@ class FuzzOgraphy(settingsPath: String)(implicit val spark: SparkSession) extend
     val leftDf = inputCitiesDF.select("Input_CountryCode", "normalized_city").distinct()
     printDf("leftDf at begin", leftDf)
 
-    val rightDf = geoCitiesDF.select("Output_CountryCode", "normalized_geo_city").distinct()
+    val rightDf = geoCitiesDF
+      .select("Output_CountryCode", "normalized_geo_city")
+     .distinct()
     printDf("rightDf at begin", rightDf)
 
 
@@ -61,20 +63,20 @@ class FuzzOgraphy(settingsPath: String)(implicit val spark: SparkSession) extend
       .transform(Matcher.getMissingInputCities(outputDf)).persist()
     printDf("missingDf after perfect Matches", missingDf)
 
-    val distances = List(10,15,20,25,30,35,40,45)
+    val distances = List(10/*,15,20,25,30,35,40,45*/)
 
     for (distance <- distances) {
-      logger.info(s"matching on a distance of:${distance}")
+      logger.info(s"matching on a distance of:$distance")
 
       val outputDfTmp = missingDf
         .transform(Matcher.distanceMatch(rightDf, distance)).persist()
         .transform(Matcher.getMatched)
         .transform(Matcher.checkDuplicates)
-      printDf(s"outputDfTmp containing ${distance}% distance matches", outputDfTmp)
+      printDf(s"outputDfTmp containing $distance% distance matches", outputDfTmp)
 
       missingDf = missingDf
         .transform(Matcher.getMissingInputCities(outputDfTmp)).persist()
-      printDf(s"missingDfTmp after ${distance}% distance matches", missingDf)
+      printDf(s"missingDfTmp after $distance% distance matches", missingDf)
 
       outputDf = outputDf.union(outputDfTmp)
 
@@ -97,14 +99,18 @@ class FuzzOgraphy(settingsPath: String)(implicit val spark: SparkSession) extend
         .save(s"/home/npodevkit/zeppelin_0.7.3/share/FUZZ-OGRAPHY/20180822/${distance}_missing.csv")
 
     }
+
+    OutputWriter.writeOutput(
+      "/home/npodevkit/zeppelin_0.7.3/share/FUZZ-OGRAPHY/20180822/output.csv",
+      inputCitiesDF, outputDf)
   }
 
   def traceDf(dataFrameName: String, dataframe: DataFrame, showDataframeContent: Boolean): Unit = {
     if (showDataframeContent) {
       //this is really costly and should be used only in debugging phase
       dataframe.persist()
-      val lines : Int = dataframe.count().toInt;
-      dataframe.show(10, false)
+      val lines : Int = dataframe.count().toInt
+      dataframe.show(10, truncate = false)
       println(s"dataFrame:$dataFrameName")
       println(s"lines:$lines")
       println("=======================================")
@@ -114,8 +120,8 @@ class FuzzOgraphy(settingsPath: String)(implicit val spark: SparkSession) extend
   def printDf(dataFrameName: String, dataframe: DataFrame): Unit = {
     //TODO:Remove
     dataframe.persist()
-    val lines : Int = dataframe.count().toInt;
-    dataframe.show(10, false)
+    val lines : Int = dataframe.count().toInt
+    dataframe.show(10, truncate = false)
     println(s"dataFrame:$dataFrameName")
     println(s"lines:$lines")
     println("=======================================")

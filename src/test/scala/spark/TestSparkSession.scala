@@ -7,7 +7,7 @@ trait TestSparkSession {
   implicit lazy val spark: SparkSession = SparkSession
     .builder()
     .config("spark.master", "local[*]")
-    .config("spark.executor.memory", "3g")
+    .config("spark.executor.memory", "6g")
     .getOrCreate()
 
 }

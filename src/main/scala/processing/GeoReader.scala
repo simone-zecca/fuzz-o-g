@@ -22,7 +22,7 @@ object GeoReader extends Loggable {
     dataFrame
       .withColumnRenamed("FULL_NAME_ND","Output_City")
       .withColumnRenamed("CC_FIPS","Output_CountryCode")
-      .withColumn("normalized_geo_city", concat(clean_city(col("Output_City"))))
+      .withColumn("normalized_geo_city", clean_city(col("Output_City")))
       .distinct()
   }
 

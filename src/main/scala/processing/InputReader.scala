@@ -22,7 +22,7 @@ object InputReader extends Loggable {
     dataFrame
       .withColumnRenamed("CountryCode", "Input_CountryCode")
       .withColumnRenamed("city", "Input_City")
-      .withColumn("normalized_city", concat(clean_city(col("Input_City"))))
+      .withColumn("normalized_city", clean_city(col("Input_City")))
       .distinct()
   }
 

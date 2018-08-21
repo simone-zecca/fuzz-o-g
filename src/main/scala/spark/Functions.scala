@@ -9,7 +9,7 @@ object Functions {
 
   def clean_city(col: Column): Column = {
     col
-      .chain(lower(_))                            //lowercase
+      .chain(initcap(_))
       .chain(translate(_, "=", " "))              //text replacement: from non standard symbols to space
       .chain(translate(_, "+", " "))
       .chain(translate(_, "-", " "))

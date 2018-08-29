@@ -45,25 +45,27 @@ class FuzzOgraphy(settingsPath: String)(implicit val spark: SparkSession) extend
     //traceDf("geoCitiesDF", geoCitiesDF, printSample)
 
     val leftDf = inputCitiesDF.select("Input_CountryCode", "normalized_city").distinct()
-    printDf("leftDf at begin", leftDf)
+    traceDf("leftDf at begin", leftDf, printSample)
 
     val rightDf = geoCitiesDF
       .select("Output_CountryCode", "normalized_geo_city")
      .distinct()
-    printDf("rightDf at begin", rightDf)
+    traceDf("rightDf at begin", rightDf, printSample)
 
 
     var outputDf = leftDf
       .transform(Matcher.perfectMatch(rightDf)).persist()
       .transform(Matcher.getMatched)
       .transform(Matcher.checkDuplicates)
-    printDf("outputDf containing perfect Matches", outputDf)
+    traceDf("outputDf containing perfect Matches", outputDf, printSample)
 
     var missingDf = leftDf
-      .transform(Matcher.getMissingInputCities(outputDf)).persist()
-    printDf("missingDf after perfect Matches", missingDf)
+      .transform(Matcher.getMissingInputCities(outputDf))//.persist()
+    traceDf("missingDf after perfect Matches", missingDf, printSample)
 
-    val distances = List(10/*,15,20,25,30,35,40,45*/)
+    //the processing will be performed one time for each distance
+    //TODO:move in configuration hocon
+    val distances = List(10,15,20,25,30,35,40,45)
 
     for (distance <- distances) {
       logger.info(s"matching on a distance of:$distance")
@@ -72,42 +74,40 @@ class FuzzOgraphy(settingsPath: String)(implicit val spark: SparkSession) extend
         .transform(Matcher.distanceMatch(rightDf, distance)).persist()
         .transform(Matcher.getMatched)
         .transform(Matcher.checkDuplicates)
-      printDf(s"outputDfTmp containing $distance% distance matches", outputDfTmp)
+      traceDf(s"outputDfTmp containing $distance% distance matches", outputDfTmp, printSample)
 
       missingDf = missingDf
-        .transform(Matcher.getMissingInputCities(outputDfTmp)).persist()
-      printDf(s"missingDfTmp after $distance% distance matches", missingDf)
+        .transform(Matcher.getMissingInputCities(outputDfTmp))//.persist()
+      traceDf(s"missingDfTmp after $distance% distance matches", missingDf, printSample)
 
       outputDf = outputDf.union(outputDfTmp)
 
-      outputDf
-        .repartition(1)
-        .sort()
-        .write
-        .format("csv")
-        .option("header", "true")
-        .option("delimiter", "|")
-        .save(s"/home/npodevkit/zeppelin_0.7.3/share/FUZZ-OGRAPHY/20180822/${distance}_output.csv")
+//      outputDf
+//        .repartition(1)
+//        .sort()
+//        .write
+//        .format("csv")
+//        .option("header", "true")
+//        .option("delimiter", "|")
+//        .save(s"/home/npodevkit/FUZZ-OGRAPHY/test/${distance}_output.csv")
 
-      missingDf
-        .repartition(1)
-        .sort()
-        .write
-        .format("csv")
-        .option("header", "true")
-        .option("delimiter", "|")
-        .save(s"/home/npodevkit/zeppelin_0.7.3/share/FUZZ-OGRAPHY/20180822/${distance}_missing.csv")
+//      missingDf
+//        .repartition(1)
+//        .sort()
+//        .write
+//        .format("csv")
+//        .option("header", "true")
+//        .option("delimiter", "|")
+//        .save(s"/home/npodevkit/FUZZ-OGRAPHY/test/${distance}_missing.csv")
 
     }
 
-    OutputWriter.writeOutput(
-      "/home/npodevkit/zeppelin_0.7.3/share/FUZZ-OGRAPHY/20180822/output.csv",
-      inputCitiesDF, outputDf)
+    OutputWriter.writeOutput(configuration.output.path, inputCitiesDF, outputDf)
   }
 
   def traceDf(dataFrameName: String, dataframe: DataFrame, showDataframeContent: Boolean): Unit = {
+    //this is costly and to be used only in debugging
     if (showDataframeContent) {
-      //this is really costly and should be used only in debugging phase
       dataframe.persist()
       val lines : Int = dataframe.count().toInt
       dataframe.show(10, truncate = false)
@@ -115,16 +115,6 @@ class FuzzOgraphy(settingsPath: String)(implicit val spark: SparkSession) extend
       println(s"lines:$lines")
       println("=======================================")
     }
-  }
-
-  def printDf(dataFrameName: String, dataframe: DataFrame): Unit = {
-    //TODO:Remove
-    dataframe.persist()
-    val lines : Int = dataframe.count().toInt
-    dataframe.show(10, truncate = false)
-    println(s"dataFrame:$dataFrameName")
-    println(s"lines:$lines")
-    println("=======================================")
   }
 
 }

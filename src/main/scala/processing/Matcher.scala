@@ -15,6 +15,7 @@ object Matcher extends Loggable {
         citiesDf("normalized_city") === geoCitiesDf("normalized_geo_city"),
         "left_outer"
       )
+      .withColumn("distance_percent", lit(0))
   }
 
   def distanceMatch(geoCitiesDf: DataFrame, distancePerCent: Int)(citiesDf: DataFrame): DataFrame = {
@@ -32,6 +33,7 @@ object Matcher extends Loggable {
             / (levenshtein(citiesDf("normalized_city"), geoCitiesDf("normalized_geo_city")) * 100) ) <= distancePerCent),
         "left_outer")
       .dropDuplicates("normalized_city")
+      .withColumn("distance_percent", lit(distancePerCent))
   }
 
   def getMatched(joinedDf: DataFrame): DataFrame = {
@@ -57,6 +59,7 @@ object Matcher extends Loggable {
     )
   }
 
+  //this method perform a count on the dataframe. Better to persist before calling
   def checkDuplicates(joinedDf: DataFrame): DataFrame = {
     val duplicatesDf =
       joinedDf

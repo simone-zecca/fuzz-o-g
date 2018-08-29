@@ -1,6 +1,6 @@
 package configuration
 
-case class Configuration(inputFiles: InputFiles, geoData: GeoData, processing: Processing)
+case class Configuration(inputFiles: InputFiles, geoData: GeoData, processing: Processing, output: Output)
 
 case class InputFiles(
   basePath: String,
@@ -17,4 +17,8 @@ case class Processing(
   logfileSuffix: String,
   loggingProperties: String,
   showDataframeSample: Boolean
+)
+
+case class Output(
+  path: String
 )

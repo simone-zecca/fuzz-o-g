@@ -2,7 +2,6 @@ package processing
 
 import logging.Loggable
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.NullType
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 object OutputWriter extends Loggable {
@@ -13,19 +12,6 @@ object OutputWriter extends Loggable {
     foundDf: DataFrame): Unit = {
 
     logger.info(s"writing to path:$path")
-
-    //    //column difference between enriched dataframe and input dataframe
-    //    val columnsToAdd: Array[String] = foundDf.columns.diff( missingDf.columns )
-    //
-    //    //add missing columns to input dataframe as empty columns
-    //    columnsToAdd.foldLeft(missingDf) { (df, colname) =>
-    //      df.withColumn(colname, lit(None).cast(NullType))
-    //    }
-
-    logger.info(s"inputCitiesDF:")
-    inputCitiesDF.printSchema()
-    logger.info(s"foundDf:")
-    foundDf.printSchema()
 
     val matchedDf = foundDf
       .withColumnRenamed("normalized_city", "normalized_city1")
@@ -44,14 +30,26 @@ object OutputWriter extends Loggable {
       .drop("normalized_city1")
 
     outputDf
-      .select("Input_CountryCode", "Input_City", "Output_CountryCode", "Output_City")
-      .sort()
+      .withColumn("Output_BlankCity", when(col("Output_City").isNotNull && !trim(col("Output_City")).equalTo(""), "No").otherwise("Yes") )
+      .select(
+        "Input_CountryCode",
+        "Input_City",
+        "Output_CountryCode",
+        "Output_City",
+        "Output_BlankCity",
+        "distance_percent"
+      )
+      .sort(
+        col("distance_percent").asc_nulls_last,
+        col("Output_CountryCode").asc_nulls_last,
+        col("Output_City").asc_nulls_last
+      )
       .repartition(1)
       .write
       .format("csv")
       .option("header", "true")
       .option("delimiter", "|")
-      .save(s"/home/npodevkit/zeppelin_0.7.3/share/FUZZ-OGRAPHY/20180822/final_result.csv")
+      .save(path)
   }
 
 }
